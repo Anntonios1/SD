@@ -1,0 +1,61 @@
+# Metrics Monitor Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-monitor
+  namespace: gpu-cluster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: metrics-monitor
+  template:
+    metadata:
+      labels:
+        app: metrics-monitor
+    spec:
+      containers:
+      - name: metrics-monitor
+        image: gpu-cluster/metrics:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_USER
+          value: "admin"
+        - name: RABBITMQ_PASS
+          value: "admin123"
+        volumeMounts:
+        - name: results
+          mountPath: /app/results
+      volumes:
+      - name: results
+        persistentVolumeClaim:
+          claimName: results-pvc
+---
+# PersistentVolumeClaim for results
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: results-pvc
+  namespace: gpu-cluster
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Service to expose metrics
+apiVersion: v1
+kind: Service
+metadata:
+  name: metrics-monitor
+  namespace: gpu-cluster
+spec:
+  selector:
+    app: metrics-monitor
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: LoadBalancer

@@ -1,0 +1,48 @@
+# GPU Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-worker
+  namespace: gpu-cluster
+spec:
+  replicas: 1  # Adjust based on GPU nodes available
+  selector:
+    matchLabels:
+      app: gpu-worker
+  template:
+    metadata:
+      labels:
+        app: gpu-worker
+    spec:
+      # Node selector for GPU nodes
+      nodeSelector:
+        accelerator: nvidia-gpu
+      
+      # Tolerations for GPU taints
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      
+      containers:
+      - name: gpu-worker
+        image: gpu-cluster/gpu-worker:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_USER
+          value: "admin"
+        - name: RABBITMQ_PASS
+          value: "admin123"
+        - name: WORKER_TYPE
+          value: "gpu"
+        
+        # GPU resource limits
+        resources:
+          limits:
+            nvidia.com/gpu: 1  # Request 1 GPU
+          requests:
+            nvidia.com/gpu: 1
+      
+      restartPolicy: Always

@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU Job Scheduler - Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .stat-card h3 {
+            color: #667eea;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #999;
+            font-size: 0.9em;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .benchmark-table {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #667eea;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .speedup-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .speedup-high {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        .speedup-medium {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+        }
+
+        .speedup-low {
+            background: linear-gradient(135deg, #4facfe, #00f2fe);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .last-update {
+            color: #999;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            animation: slideDown 0.3s;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .close:hover {
+            color: #667eea;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .form-group select,
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .form-group select:focus,
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+            z-index: 2000;
+            animation: slideInRight 0.3s;
+            max-width: 400px;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .notification.success {
+            border-left: 5px solid #28a745;
+        }
+
+        .notification.error {
+            border-left: 5px solid #dc3545;
+        }
+
+        .notification.info {
+            border-left: 5px solid #17a2b8;
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .modal-content {
+                width: 95%;
+                margin: 10% auto;
+            }
+
+            .notification {
+                right: 10px;
+                max-width: calc(100% - 20px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <span>🚀</span>
+                GPU Job Scheduler Dashboard
+            </h1>
+            <p class="subtitle">Sistema Distribuido de Ejecución de Trabajos con GPU RTX 4060</p>
+            <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                <button class="refresh-btn" onclick="loadAllData()">🔄 Actualizar Datos</button>
+                <button class="refresh-btn" onclick="showJobModal()">➕ Enviar Trabajo</button>
+                <button class="refresh-btn" onclick="runQuickBenchmark()">⚡ Benchmark Rápido</button>
+                <button class="refresh-btn" onclick="runFullBenchmark()">🏆 Benchmark Completo</button>
+                <button class="refresh-btn" onclick="clearFailedJobs()" style="background: linear-gradient(135deg, #f5576c, #f093fb);">🗑️ Limpiar Errores</button>
+                <span class="last-update" id="lastUpdate"></span>
+            </div>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>📊 Total de Trabajos</h3>
+                <div class="stat-value" id="totalJobs">0</div>
+                <div class="stat-label">Procesados</div>
+            </div>
+            <div class="stat-card">
+                <h3>✅ Exitosos</h3>
+                <div class="stat-value" id="successfulJobs" style="color: #28a745;">0</div>
+                <div class="stat-label">Completados</div>
+            </div>
+            <div class="stat-card">
+                <h3>❌ Fallidos</h3>
+                <div class="stat-value" id="failedJobs" style="color: #dc3545;">0</div>
+                <div class="stat-label">Con errores</div>
+            </div>
+            <div class="stat-card">
+                <h3>🎯 Tasa de Éxito</h3>
+                <div class="stat-value" id="successRate" style="color: #17a2b8;">0%</div>
+                <div class="stat-label">Rendimiento</div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h2>⚡ Speedup GPU vs CPU</h2>
+                <canvas id="speedupChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h2>⏱️ Tiempo Promedio de Procesamiento</h2>
+                <canvas id="timeChart"></canvas>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h2>📈 Distribución de Trabajos por Tipo</h2>
+                <canvas id="distributionChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h2>🖥️ GPU vs CPU - Trabajos Procesados</h2>
+                <canvas id="workerChart"></canvas>
+            </div>
+        </div>
+
+        <div class="benchmark-table">
+            <h2 style="color: #667eea; margin-bottom: 20px;">🏆 Resultados de Benchmarks</h2>
+            <table id="benchmarkTable">
+                <thead>
+                    <tr>
+                        <th>Benchmark</th>
+                        <th>Tipo</th>
+                        <th>GPU (s)</th>
+                        <th>CPU (s)</th>
+                        <th>Speedup</th>
+                    </tr>
+                </thead>
+                <tbody id="benchmarkBody">
+                    <tr><td colspan="5" class="loading">Cargando datos...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal for Job Submission -->
+    <div id="jobModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeJobModal()">&times;</span>
+            <h2 style="color: #667eea; margin-bottom: 25px;">➕ Enviar Nuevo Trabajo</h2>
+            
+            <div class="form-group">
+                <label for="jobType">Tipo de Trabajo</label>
+                <select id="jobType" onchange="updateJobParams()">
+                    <option value="matrix_multiply">Matrix Multiply</option>
+                    <option value="neural_network">Neural Network</option>
+                    <option value="vector_add">Vector Addition</option>
+                    <option value="image_processing">Image Processing</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="workerType">Worker</label>
+                <select id="workerType">
+                    <option value="gpu">GPU (RTX 4060)</option>
+                    <option value="cpu">CPU</option>
+                </select>
+            </div>
+
+            <div id="jobParams">
+                <!-- Dynamic parameters will be inserted here -->
+            </div>
+
+            <button class="refresh-btn" onclick="submitJob()" style="width: 100%; margin-top: 10px;">
+                🚀 Enviar Trabajo
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let charts = {};
+
+        function formatTime(seconds) {
+            return seconds.toFixed(4) + 's';
+        }
+
+        function getSpeedupClass(speedup) {
+            if (speedup >= 10) return 'speedup-high';
+            if (speedup >= 2) return 'speedup-medium';
+            return 'speedup-low';
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                document.getElementById('totalJobs').textContent = data.total_jobs;
+                document.getElementById('successfulJobs').textContent = data.successful_jobs;
+                document.getElementById('failedJobs').textContent = data.failed_jobs;
+                
+                const successRate = data.total_jobs > 0 
+                    ? ((data.successful_jobs / data.total_jobs) * 100).toFixed(1)
+                    : 0;
+                document.getElementById('successRate').textContent = successRate + '%';
+                
+                document.getElementById('lastUpdate').textContent = 
+                    'Última actualización: ' + new Date(data.last_updated).toLocaleTimeString();
+                
+                return data;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        async function loadPerformance() {
+            try {
+                const response = await fetch('/api/performance');
+                const data = await response.json();
+                
+                if (data.length === 0) return;
+
+                const labels = data.map(d => d.job_type.replace('_', ' ').toUpperCase());
+                const speedups = data.map(d => d.speedup);
+                const gpuTimes = data.map(d => d.gpu_avg);
+                const cpuTimes = data.map(d => d.cpu_avg);
+
+                // Speedup Chart
+                if (charts.speedup) charts.speedup.destroy();
+                const speedupCtx = document.getElementById('speedupChart').getContext('2d');
+                charts.speedup = new Chart(speedupCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Speedup (x veces más rápido)',
+                            data: speedups,
+                            backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                            borderColor: 'rgba(102, 126, 234, 1)',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: true },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.parsed.y.toFixed(2) + 'x más rápido';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: { beginAtZero: true }
+                        }
+                    }
+                });
+
+                // Time Comparison Chart
+                if (charts.time) charts.time.destroy();
+                const timeCtx = document.getElementById('timeChart').getContext('2d');
+                charts.time = new Chart(timeCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'GPU',
+                                data: gpuTimes,
+                                backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                                borderColor: 'rgba(102, 126, 234, 1)',
+                                borderWidth: 2
+                            },
+                            {
+                                label: 'CPU',
+                                data: cpuTimes,
+                                backgroundColor: 'rgba(245, 87, 108, 0.8)',
+                                borderColor: 'rgba(245, 87, 108, 1)',
+                                borderWidth: 2
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: true },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': ' + context.parsed.y.toFixed(4) + 's';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: { beginAtZero: true }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error loading performance:', error);
+            }
+        }
+
+        async function loadDistribution() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                if (!data.job_types || Object.keys(data.job_types).length === 0) return;
+
+                const jobTypes = Object.keys(data.job_types);
+                const gpuCounts = jobTypes.map(type => data.job_types[type].gpu || 0);
+                const cpuCounts = jobTypes.map(type => data.job_types[type].cpu || 0);
+
+                // Distribution Chart
+                if (charts.distribution) charts.distribution.destroy();
+                const distCtx = document.getElementById('distributionChart').getContext('2d');
+                charts.distribution = new Chart(distCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: jobTypes.map(t => t.replace('_', ' ').toUpperCase()),
+                        datasets: [{
+                            data: jobTypes.map(type => 
+                                (data.job_types[type].gpu || 0) + (data.job_types[type].cpu || 0)
+                            ),
+                            backgroundColor: [
+                                'rgba(102, 126, 234, 0.8)',
+                                'rgba(118, 75, 162, 0.8)',
+                                'rgba(245, 87, 108, 0.8)',
+                                'rgba(79, 172, 254, 0.8)',
+                                'rgba(240, 147, 251, 0.8)'
+                            ],
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'bottom' }
+                        }
+                    }
+                });
+
+                // Worker Distribution Chart
+                if (charts.worker) charts.worker.destroy();
+                const workerCtx = document.getElementById('workerChart').getContext('2d');
+                charts.worker = new Chart(workerCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: jobTypes.map(t => t.replace('_', ' ').toUpperCase()),
+                        datasets: [
+                            {
+                                label: 'GPU Worker',
+                                data: gpuCounts,
+                                backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                                borderColor: 'rgba(102, 126, 234, 1)',
+                                borderWidth: 2
+                            },
+                            {
+                                label: 'CPU Worker',
+                                data: cpuCounts,
+                                backgroundColor: 'rgba(245, 87, 108, 0.8)',
+                                borderColor: 'rgba(245, 87, 108, 1)',
+                                borderWidth: 2
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: true }
+                        },
+                        scales: {
+                            y: { beginAtZero: true }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error loading distribution:', error);
+            }
+        }
+
+        async function loadBenchmarks() {
+            try {
+                const response = await fetch('/api/benchmarks');
+                const data = await response.json();
+                
+                const tbody = document.getElementById('benchmarkBody');
+                
+                if (!data.benchmarks || data.benchmarks.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #999;">No hay benchmarks disponibles</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.benchmarks.map(bench => `
+                    <tr>
+                        <td><strong>${bench.name}</strong></td>
+                        <td>${bench.job_type.replace('_', ' ')}</td>
+                        <td>${formatTime(bench.gpu_time)}</td>
+                        <td>${formatTime(bench.cpu_time)}</td>
+                        <td>
+                            <span class="speedup-badge ${getSpeedupClass(bench.speedup)}">
+                                ${bench.speedup.toFixed(2)}x
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading benchmarks:', error);
+            }
+        }
+
+        async function loadAllData() {
+            await loadStats();
+            await loadPerformance();
+            await loadDistribution();
+            await loadBenchmarks();
+        }
+
+        // Load data on page load
+        loadAllData();
+
+        // Auto-refresh every 5 seconds
+        setInterval(loadAllData, 5000);
+
+        // Modal functions
+        function showJobModal() {
+            document.getElementById('jobModal').style.display = 'block';
+            updateJobParams();
+        }
+
+        function closeJobModal() {
+            document.getElementById('jobModal').style.display = 'none';
+        }
+
+        function updateJobParams() {
+            const jobType = document.getElementById('jobType').value;
+            const paramsDiv = document.getElementById('jobParams');
+            
+            let html = '';
+            
+            if (jobType === 'matrix_multiply') {
+                html = `
+                    <div class="form-group">
+                        <label>Tamaño de Matriz</label>
+                        <input type="number" id="size" value="1000" min="100" max="5000">
+                    </div>
+                    <div class="form-group">
+                        <label>Iteraciones</label>
+                        <input type="number" id="iterations" value="10" min="1" max="100">
+                    </div>
+                `;
+            } else if (jobType === 'neural_network') {
+                html = `
+                    <div class="form-group">
+                        <label>Epochs</label>
+                        <input type="number" id="epochs" value="5" min="1" max="50">
+                    </div>
+                    <div class="form-group">
+                        <label>Batch Size</label>
+                        <input type="number" id="batch_size" value="64" min="16" max="256">
+                    </div>
+                `;
+            } else if (jobType === 'vector_add') {
+                html = `
+                    <div class="form-group">
+                        <label>Tamaño del Vector</label>
+                        <input type="number" id="size" value="10000000" min="1000" max="100000000">
+                    </div>
+                    <div class="form-group">
+                        <label>Iteraciones</label>
+                        <input type="number" id="iterations" value="10" min="1" max="100">
+                    </div>
+                `;
+            } else if (jobType === 'image_processing') {
+                html = `
+                    <div class="form-group">
+                        <label>Batch Size</label>
+                        <input type="number" id="batch_size" value="64" min="8" max="256">
+                    </div>
+                    <div class="form-group">
+                        <label>Tamaño de Imagen</label>
+                        <input type="number" id="image_size" value="224" min="64" max="1024">
+                    </div>
+                    <div class="form-group">
+                        <label>Iteraciones</label>
+                        <input type="number" id="iterations" value="10" min="1" max="100">
+                    </div>
+                `;
+            }
+            
+            paramsDiv.innerHTML = html;
+        }
+
+        async function submitJob() {
+            const jobType = document.getElementById('jobType').value;
+            const preferGpu = document.getElementById('workerType').value === 'gpu';
+            
+            // Get parameters based on job type
+            let params = {};
+            if (jobType === 'matrix_multiply') {
+                params = {
+                    size: parseInt(document.getElementById('size').value),
+                    iterations: parseInt(document.getElementById('iterations').value)
+                };
+            } else if (jobType === 'neural_network') {
+                params = {
+                    epochs: parseInt(document.getElementById('epochs').value),
+                    batch_size: parseInt(document.getElementById('batch_size').value),
+                    input_size: 784,
+                    hidden_size: 256,
+                    output_size: 10
+                };
+            } else if (jobType === 'vector_add') {
+                params = {
+                    size: parseInt(document.getElementById('size').value),
+                    iterations: parseInt(document.getElementById('iterations').value)
+                };
+            } else if (jobType === 'image_processing') {
+                params = {
+                    batch_size: parseInt(document.getElementById('batch_size').value),
+                    image_size: parseInt(document.getElementById('image_size').value),
+                    iterations: parseInt(document.getElementById('iterations').value)
+                };
+            }
+            
+            try {
+                const response = await fetch('/api/submit_job', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        job_type: jobType,
+                        params: params,
+                        prefer_gpu: preferGpu
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('✅ Trabajo enviado: ' + data.job_id, 'success');
+                    closeJobModal();
+                } else {
+                    showNotification('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Error al enviar trabajo: ' + error.message, 'error');
+            }
+        }
+
+        async function runQuickBenchmark() {
+            if (!confirm('¿Ejecutar benchmark rápido? (2 pruebas)')) return;
+            
+            try {
+                const response = await fetch('/api/run_benchmark', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ type: 'quick' })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('⚡ Benchmark rápido iniciado. Los resultados aparecerán en unos segundos...', 'info');
+                } else {
+                    showNotification('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        async function runFullBenchmark() {
+            if (!confirm('¿Ejecutar benchmark completo? (5 pruebas intensivas, puede tardar varios minutos)')) return;
+            
+            try {
+                const response = await fetch('/api/run_benchmark', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ type: 'full' })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('🏆 Benchmark completo iniciado. Esto puede tardar varios minutos...', 'info');
+                } else {
+                    showNotification('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        async function clearFailedJobs() {
+            if (!confirm('¿Limpiar todos los trabajos fallidos?')) return;
+            
+            try {
+                const response = await fetch('/api/clear_results', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('✅ Trabajos fallidos eliminados', 'success');
+                    loadAllData();
+                } else {
+                    showNotification('❌ Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showNotification('❌ Error: ' + error.message, 'error');
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerHTML = `<strong>${message}</strong>`;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideInRight 0.3s reverse';
+                setTimeout(() => notification.remove(), 300);
+            }, 4000);
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('jobModal');
+            if (event.target === modal) {
+                closeJobModal();
+            }
+        }
+    </script>
+</body>
+</html>

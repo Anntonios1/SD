@@ -1,0 +1,39 @@
+# CPU Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-worker
+  namespace: gpu-cluster
+spec:
+  replicas: 2  # Can have multiple CPU workers
+  selector:
+    matchLabels:
+      app: cpu-worker
+  template:
+    metadata:
+      labels:
+        app: cpu-worker
+    spec:
+      containers:
+      - name: cpu-worker
+        image: gpu-cluster/cpu-worker:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        - name: RABBITMQ_USER
+          value: "admin"
+        - name: RABBITMQ_PASS
+          value: "admin123"
+        - name: WORKER_TYPE
+          value: "cpu"
+        
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+      
+      restartPolicy: Always

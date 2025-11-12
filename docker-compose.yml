@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  # RabbitMQ Broker
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq-broker
+    ports:
+      - "5672:5672"    # AMQP port
+      - "15672:15672"  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - gpu-cluster
+
+  # Redis (Alternative/backup broker)
+  redis:
+    image: redis:7-alpine
+    container_name: redis-broker
+    ports:
+      - "6379:6379"
+    networks:
+      - gpu-cluster
+
+  # Scheduler
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.scheduler
+    container_name: job-scheduler
+    depends_on:
+      - rabbitmq
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: admin
+      RABBITMQ_PASS: admin123
+    networks:
+      - gpu-cluster
+    restart: unless-stopped
+
+  # GPU Worker
+  gpu-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gpu
+    container_name: gpu-worker-1
+    depends_on:
+      - rabbitmq
+      - scheduler
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: admin
+      RABBITMQ_PASS: admin123
+      WORKER_TYPE: gpu
+      WORKER_ID: gpu-worker-1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
+    networks:
+      - gpu-cluster
+    restart: unless-stopped
+
+  # CPU Worker (for comparison)
+  cpu-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cpu
+    container_name: cpu-worker-1
+    depends_on:
+      - rabbitmq
+      - scheduler
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: admin
+      RABBITMQ_PASS: admin123
+      WORKER_TYPE: cpu
+      WORKER_ID: cpu-worker-1
+    networks:
+      - gpu-cluster
+    restart: unless-stopped
+
+  # Metrics Collector
+  metrics:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.metrics
+    container_name: metrics-collector
+    ports:
+      - "8000:8000"
+    depends_on:
+      - rabbitmq
+    environment:
+      RABBITMQ_HOST: rabbitmq
+    networks:
+      - gpu-cluster
+    volumes:
+      - ./results:/app/results
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  gpu-cluster:
+    driver: bridge
